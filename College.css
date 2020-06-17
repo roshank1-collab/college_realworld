@@ -1,0 +1,127 @@
+* 
+{
+	margin: 0;
+	padding: 0;
+}
+
+body
+{
+	font-family: sans-serif;
+}
+#nav-bar
+{
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+.navbar
+{
+	background: #acb6e5;  /* fallback for old browsers */
+background: -webkit-linear-gradient(to right, #86fde8, #acb6e5);  /* Chrome 10-25, Safari 5.1-6 */
+background: linear-gradient(to right, #86fde8, #acb6e5); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+
+	padding: 0 !important;
+
+}
+.navbar-brand img
+{
+	height: 40px;
+	padding-left: 20px;
+}
+.navbar-nav li
+{
+	padding: 0 10px;
+
+}
+.navbar-nav li a
+{
+	color: black !important;
+	font-weight: 600;
+	border: none;
+	float: right;
+	text-align: left;
+	opacity: 0.6;
+	border-radius: 5px;
+	height: 40px;
+	
+
+}
+#navbarNav a:hover
+{
+  text-decoration: underline;
+  color:lightgreen;
+
+}
+.fa-bars
+{
+	color: #FF8C00;
+	font-size: 30px !important;
+
+}
+.navbar-toggler
+{
+	outline: none;
+}
+#banner
+
+{
+background: #acb6e5;  /* fallback for old browsers */
+background: -webkit-linear-gradient(to right, #86fde8, #acb6e5);  /* Chrome 10-25, Safari 5.1-6 */
+background: linear-gradient(to right, #86fde8, #acb6e5); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+color: #fff;
+padding-top: 5%; 
+}
+.promo-title
+{
+font-size: 30px;
+color: #4C5270;
+font-weight: 600;
+margin-top: 100px;
+
+}
+.promo-title-p
+{
+	margin-top: -20px;
+	color: #4C5270;
+
+}
+.play-btn
+{
+	width:240px;
+	height: 65+px;
+	margin-left: -15px;
+	margin-top: -10px;
+	
+}
+#banner a
+{
+	color: #fff;
+	text-decoration: none;
+
+}
+.img-fluid
+{
+	height: 200px;
+	width: 200px;
+}
+.bottom-img
+{
+	width: 100%;
+}
+
+#services
+{
+padding: 80px 0;
+
+
+}
+.service-img
+{
+	width: 100px;
+	margin-top: 20px;
+}
+.services
+{
+	margin-top:-100px;
+
+}
