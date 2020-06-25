@@ -1,0 +1,479 @@
+{\rtf1\ansi\ansicpg1252\deff0\nouicompat\deflang1033{\fonttbl{\f0\fnil\fcharset0 Calibri;}}
+{\*\generator Riched20 10.0.18362}\viewkind4\uc1 
+\pard\sa200\sl276\slmult1\f0\fs22\lang9 HTTP & WebSocket ASGI Message Format\par
+====================================\par
+\par
+**Version**: 2.1 (2019-03-20)\par
+\par
+The HTTP+WebSocket ASGI sub-specification outlines how to transport HTTP/1.1,\par
+HTTP/2 and WebSocket connections within ASGI.\par
+\par
+It is deliberately intended and designed to be a superset of the WSGI format\par
+and specifies how to translate between the two for the set of requests that\par
+are able to be handled by WSGI.\par
+\par
+\par
+Spec Versions\par
+-------------\par
+\par
+This spec has had two versions:\par
+\par
+* ``2.0``: The first version of the spec, released with ASGI 2.0\par
+* ``2.1``: Added the ``headers`` key to the WebSocket Accept response\par
+\par
+Spec versions let you understand what the server you are using understands. If\par
+a server tells you it only supports version ``2.0`` of this spec, then\par
+sending ``headers`` with a WebSocket Accept message is an error, for example.\par
+\par
+They are separate from the HTTP version or the ASGI version.\par
+\par
+\par
+HTTP\par
+----\par
+\par
+The HTTP format covers HTTP/1.0, HTTP/1.1 and HTTP/2, as the changes in\par
+HTTP/2 are largely on the transport level. A protocol server should give\par
+different scopes to different requests on the same HTTP/2 connection, and\par
+correctly multiplex the responses back to the same stream in which they came.\par
+The HTTP version is available as a string in the scope.\par
+\par
+Multiple header fields with the same name are complex in HTTP. RFC 7230\par
+states that for any header field that can appear multiple times, it is exactly\par
+equivalent to sending that header field only once with all the values joined by\par
+commas.\par
+\par
+However, RFC 7230 and RFC 6265 make it clear that this rule does not apply to\par
+the various headers used by HTTP cookies (``Cookie`` and ``Set-Cookie``). The\par
+``Cookie`` header must only be sent once by a user-agent, but the\par
+``Set-Cookie`` header may appear repeatedly and cannot be joined by commas.\par
+The ASGI design decision is to transport both request and response headers as\par
+lists of 2-element ``[name, value]`` lists and preserve headers exactly as they\par
+were provided.\par
+\par
+The HTTP protocol should be signified to ASGI applications with a ``type``\par
+value of ``http``.\par
+\par
+\par
+Connection Scope\par
+''''''''''''''''\par
+\par
+HTTP connections have a single-request *connection scope* - that is, your\par
+application will be called at the start of the request, and will last until\par
+the end of that specific request, even if the underlying socket is still open\par
+and serving multiple requests.\par
+\par
+If you hold a response open for long-polling or similar, the *connection scope*\par
+will persist until the response closes from either the client or server side.\par
+\par
+The *connection scope* information passed in ``scope`` contains:\par
+\par
+* ``type`` (*Unicode string*) -- ``"http"``.\par
+\par
+* ``asgi["version"]`` (*Unicode string*) -- Version of the ASGI spec.\par
+\par
+* ``asgi["spec_version"]`` (*Unicode string*) -- Version of the ASGI HTTP spec\par
+  this server understands; one of ``"2.0"`` or ``"2.1"``. Optional; if missing\par
+  assume ``2.0``.\par
+\par
+* ``http_version`` (*Unicode string*) -- One of ``"1.0"``, ``"1.1"`` or ``"2"``.\par
+\par
+* ``method`` (*Unicode string*) -- The HTTP method name, uppercased.\par
+\par
+* ``scheme`` (*Unicode string*) -- URL scheme portion (likely ``"http"`` or\par
+  ``"https"``). Optional (but must not be empty); default is ``"http"``.\par
+\par
+* ``path`` (*Unicode string*) -- HTTP request target excluding any query\par
+  string, with percent-encoded sequences and UTF-8 byte sequences\par
+  decoded into characters.\par
+\par
+* ``raw_path`` (*byte string*) -- The original HTTP path component unmodified\par
+  from the bytes that were received by the web server. Some web server\par
+  implementations may be unable to provide this. Optional; defaults to ``None``.\par
+\par
+* ``query_string`` (*byte string*) -- URL portion after the ``?``,\par
+  percent-encoded.\par
+\par
+* ``root_path`` (*Unicode string*) -- The root path this application\par
+  is mounted at; same as ``SCRIPT_NAME`` in WSGI. Optional; defaults\par
+  to ``""``.\par
+\par
+* ``headers`` (*Iterable[[byte string, byte string]]*) -- An iterable of\par
+  ``[name, value]`` two-item iterables, where ``name`` is the header name, and\par
+  ``value`` is the header value. Order of header values must be preserved from\par
+  the original HTTP request; order of header names is not important. Duplicates\par
+  are possible and must be preserved in the message as received. Header names\par
+  must be lowercased. Pseudo headers (present in HTTP/2 and HTTP/3) must be\par
+  removed; if ``:authority`` is present its value must be added to the start of\par
+  the iterable with ``host`` as the header name or replace any existing host\par
+  header already present.\par
+\par
+* ``client`` (*Iterable[Unicode string, int]*) -- A two-item iterable of\par
+  ``[host, port]``, where ``host`` is the remote host's IPv4 or IPv6 address, and\par
+  ``port`` is the remote port as an integer. Optional; defaults to ``None``.\par
+\par
+* ``server`` (*Iterable[Unicode string, int]*) -- A two-item iterable of\par
+  ``[host, port]``, where ``host`` is the listening address for this server,\par
+  and ``port`` is the integer listening port. Optional; defaults to ``None``.\par
+\par
+Servers are responsible for handling inbound and outbound chunked transfer\par
+encodings. A request with a ``chunked`` encoded body should be automatically\par
+de-chunked by the server and presented to the application as plain body bytes;\par
+a response that is given to the server with no ``Content-Length`` may be chunked\par
+as the server sees fit.\par
+\par
+\par
+Request - ``receive`` event\par
+'''''''''''''''''''''''''''\par
+\par
+Sent to the application to indicate an incoming request. Most of the request\par
+information is in the connection ``scope``; the body message serves as a way to\par
+stream large incoming HTTP bodies in chunks, and as a trigger to actually run\par
+request code (as you should not trigger on a connection opening alone).\par
+\par
+Note that if the request is being sent using ``Transfer-Encoding: chunked``,\par
+the server is responsible for handling this encoding. The ``http.request``\par
+messages should contain just the decoded contents of each chunk.\par
+\par
+Keys:\par
+\par
+* ``type`` (*Unicode string*) -- ``"http.request"``.\par
+\par
+* ``body`` (*byte string*) -- Body of the request. Optional; defaults to\par
+  ``b""``. If ``more_body`` is set, treat as start of body and concatenate\par
+  on further chunks.\par
+\par
+* ``more_body`` (*bool*) -- Signifies if there is additional content\par
+  to come (as part of a Request message). If ``True``, the consuming\par
+  application should wait until it gets a chunk with this set to ``False``. If\par
+  ``False``, the request is complete and should be processed. Optional;\par
+  defaults to ``False``.\par
+\par
+\par
+Response Start - ``send`` event\par
+'''''''''''''''''''''''''''''''\par
+\par
+Sent by the application to start sending a response to the client. Needs to be\par
+followed by at least one response content message. The protocol server must not\par
+start sending the response to the client until it has received at least one\par
+*Response Body* event.\par
+\par
+You may send a ``Transfer-Encoding`` header in this message, but the server\par
+must ignore it. Servers handle ``Transfer-Encoding`` themselves, and may opt\par
+to use ``Transfer-Encoding: chunked`` if the application presents a response\par
+that has no ``Content-Length`` set.\par
+\par
+Note that this is not the same as ``Content-Encoding``, which the application\par
+still controls, and which is the appropriate place to set ``gzip`` or other\par
+compression flags.\par
+\par
+Keys:\par
+\par
+* ``type`` (*Unicode string*) -- ``"http.response.start"``.\par
+\par
+* ``status`` (*int*) -- HTTP status code.\par
+\par
+* ``headers`` (*Iterable[[byte string, byte string]]*) -- An iterable of\par
+  ``[name, value]`` two-item iterables, where ``name`` is the header name, and\par
+  ``value`` is the header value. Order must be preserved in the HTTP response.\par
+  Header names must be lowercased. Optional; defaults to an empty list. Pseudo\par
+  headers (present in HTTP/2 and HTTP/3) must not be present.\par
+\par
+\par
+Response Body - ``send`` event\par
+''''''''''''''''''''''''''''''\par
+\par
+Continues sending a response to the client. Protocol servers must\par
+flush any data passed to them into the send buffer before returning from a\par
+send call. If ``more_body`` is set to ``False`` this will\par
+close the connection.\par
+\par
+Keys:\par
+\par
+* ``type`` (*Unicode string*) -- ``"http.response.body"``.\par
+\par
+* ``body`` (*byte string*) -- HTTP body content. Concatenated onto any previous\par
+  ``body`` values sent in this connection scope. Optional; defaults to\par
+  ``b""``.\par
+\par
+* ``more_body`` (*bool*) -- Signifies if there is additional content\par
+  to come (as part of a Response Body message). If ``False``, response will\par
+  be taken as complete and closed, and any further messages on the channel\par
+  will be ignored. Optional; defaults to ``False``.\par
+\par
+\par
+Disconnect - ``receive`` event\par
+''''''''''''''''''''''''''''''\par
+\par
+Sent to the application when a HTTP connection is closed or if ``receive``\par
+is called after a response has been sent. This is mainly useful for\par
+long-polling, where you may want to trigger cleanup code if the\par
+connection closes early.\par
+\par
+Keys:\par
+\par
+* ``type`` (*Unicode string*) -- ``"http.disconnect"``.\par
+\par
+\par
+WebSocket\par
+---------\par
+\par
+WebSockets share some HTTP details - they have a path and headers - but also\par
+have more state. Again, most of that state is in the ``scope``, which will live\par
+as long as the socket does.\par
+\par
+WebSocket protocol servers should handle PING/PONG messages themselves, and\par
+send PING messages as necessary to ensure the connection is alive.\par
+\par
+WebSocket protocol servers should handle message fragmentation themselves,\par
+and deliver complete messages to the application.\par
+\par
+The WebSocket protocol should be signified to ASGI applications with\par
+a ``type`` value of ``websocket``.\par
+\par
+\par
+Connection Scope\par
+''''''''''''''''\par
+\par
+WebSocket connections' scope lives as long as the socket itself - if the\par
+application dies the socket should be closed, and vice-versa.\par
+\par
+The *connection scope* information passed in ``scope`` contains initial connection\par
+metadata (mostly from the HTTP handshake):\par
+\par
+* ``type`` (*Unicode string*) -- ``"websocket"``.\par
+\par
+* ``asgi["version"]`` (*Unicode string*) -- The version of the ASGI spec.\par
+\par
+* ``asgi["spec_version"]`` (*Unicode string*) -- Version of the ASGI HTTP spec\par
+  this server understands; one of ``"2.0"`` or ``"2.1"``. Optional; if missing\par
+  assume ``"2.0"``.\par
+\par
+* ``http_version`` (*Unicode string*) -- One of ``"1.1"`` or ``"2"``. Optional;\par
+  default is ``"1.1"``.\par
+\par
+* ``scheme`` (*Unicode string*) -- URL scheme portion (likely ``"ws"`` or\par
+  ``"wss"``). Optional (but must not be empty); default is ``"ws"``.\par
+\par
+* ``path`` (*Unicode string*) -- HTTP request target excluding any query\par
+  string, with percent-encoded sequences and UTF-8 byte sequences\par
+  decoded into characters.\par
+\par
+* ``raw_path`` (*byte string*) -- The original HTTP path component unmodified\par
+  from the bytes that were received by the web server. Some web server\par
+  implementations may be unable to provide this. Optional; defaults to ``None``.\par
+\par
+* ``query_string`` (*byte string*) -- URL portion after the ``?``. Optional;\par
+  default is empty string.\par
+\par
+* ``root_path`` (*byte string*) -- The root path this application\par
+  is mounted at; same as ``SCRIPT_NAME`` in WSGI. Optional; defaults\par
+  to empty string.\par
+\par
+* ``headers`` (*Iterable[[byte string, byte string]]*) -- An iterable of\par
+  ``[name, value]`` two-item iterables, where ``name`` is the header name and\par
+  ``value`` is the header value. Order should be preserved from the original\par
+  HTTP request; duplicates are possible and must be preserved in the message\par
+  as received. Header names must be lowercased. Pseudo headers (present in\par
+  HTTP/2 and HTTP/3) must be removed; if ``:authority`` is present its value\par
+  must be added to the start of the iterable with ``host`` as the header name\par
+  or replace any existing host header already present.\par
+\par
+* ``client`` (*Iterable[Unicode string, int]*) -- A two-item iterable of\par
+  ``[host, port]``, where ``host`` is the remote host's IPv4 or IPv6 address,\par
+  and ``port`` is the remote port. Optional; defaults to ``None``.\par
+\par
+* ``server`` (*Iterable[Unicode string, int]*) -- A two-item iterable of\par
+  ``[host, port]``, where ``host`` is the listening address for this server,\par
+  and ``port`` is the integer listening port. Optional; defaults to ``None``.\par
+\par
+* ``subprotocols`` (*Iterable[Unicode string]*) -- Subprotocols the client\par
+  advertised. Optional; defaults to empty list.\par
+\par
+\par
+Connect - ``receive`` event\par
+'''''''''''''''''''''''''''\par
+\par
+Sent to the application when the client initially opens a connection and is about\par
+to finish the WebSocket handshake.\par
+\par
+This message must be responded to with either an *Accept* message\par
+or a *Close* message before the socket will pass ``websocket.receive``\par
+messages. The protocol server must send this message\par
+during the handshake phase of the WebSocket and not complete the handshake\par
+until it gets a reply, returning HTTP status code ``403`` if the connection is\par
+denied.\par
+\par
+Keys:\par
+\par
+* ``type`` (*Unicode string*) -- ``"websocket.connect"``.\par
+\par
+\par
+Accept - ``send`` event\par
+'''''''''''''''''''''''\par
+\par
+Sent by the application when it wishes to accept an incoming connection.\par
+\par
+* ``type`` (*Unicode string*) -- ``"websocket.accept"``.\par
+\par
+* ``subprotocol`` (*Unicode string*) -- The subprotocol the server wishes to\par
+  accept. Optional; defaults to ``None``.\par
+\par
+* ``headers`` (*Iterable[[byte string, byte string]]*) -- An iterable of\par
+  ``[name, value]`` two-item iterables, where ``name`` is the header name, and\par
+  ``value`` is the header value. Order must be preserved in the HTTP response.\par
+  Header names must be lowercased. Must not include a header named\par
+  ``sec-websocket-protocol``; use the ``subprotocol`` key instead. Optional;\par
+  defaults to an empty list. *Added in spec version 2.1*. Pseudo headers\par
+  (present in HTTP/2 and HTTP/3) must not be present.\par
+\par
+\par
+Receive - ``receive`` event\par
+'''''''''''''''''''''''''''\par
+\par
+Sent to the application when a data message is received from the client.\par
+\par
+Keys:\par
+\par
+* ``type`` (*Unicode string*) -- ``"websocket.receive"``.\par
+\par
+* ``bytes`` (*byte string*) -- The message content, if it was binary mode, or\par
+  ``None``. Optional; if missing, it is equivalent to ``None``.\par
+\par
+* ``text`` (*Unicode string*) -- The message content, if it was text mode, or\par
+  ``None``. Optional; if missing, it is equivalent to ``None``.\par
+\par
+Exactly one of ``bytes`` or ``text`` must be non-``None``. One or both\par
+keys may be present, however.\par
+\par
+\par
+Send - ``send`` event\par
+'''''''''''''''''''''\par
+\par
+Sent by the application to send a data message to the client.\par
+\par
+Keys:\par
+\par
+* ``type`` (*Unicode string*) -- ``"websocket.send"``.\par
+\par
+* ``bytes`` (*byte string*) -- Binary message content, or ``None``.\par
+   Optional; if missing, it is equivalent to ``None``.\par
+\par
+* ``text`` (*Unicode string*) -- Text message content, or ``None``.\par
+   Optional; if missing, it is equivalent to ``None``.\par
+\par
+Exactly one of ``bytes`` or ``text`` must be non-``None``. One or both\par
+keys may be present, however.\par
+\par
+\par
+Disconnect - ``receive`` event\par
+''''''''''''''''''''''''''''''\par
+\par
+Sent to the application when either connection to the client is lost, either from\par
+the client closing the connection, the server closing the connection, or loss of the\par
+socket.\par
+\par
+Keys:\par
+\par
+* ``type`` (*Unicode string*) -- ``"websocket.disconnect"``\par
+\par
+* ``code`` (*int*) -- The WebSocket close code, as per the WebSocket spec.\par
+\par
+\par
+Close - ``send`` event\par
+''''''''''''''''''''''\par
+\par
+Sent by the application to tell the server to close the connection.\par
+\par
+If this is sent before the socket is accepted, the server\par
+must close the connection with a HTTP 403 error code\par
+(Forbidden), and not complete the WebSocket handshake; this may present on some\par
+browsers as a different WebSocket error code (such as 1006, Abnormal Closure).\par
+\par
+If this is sent after the socket is accepted, the server must close the socket\par
+with the close code passed in the message (or 1000 if none is specified).\par
+\par
+* ``type`` (*Unicode string*) -- ``"websocket.close"``.\par
+\par
+* ``code`` (*int*) -- The WebSocket close code, as per the WebSocket spec.\par
+  Optional; defaults to ``1000``.\par
+\par
+\par
+WSGI Compatibility\par
+------------------\par
+\par
+Part of the design of the HTTP portion of this spec is to make sure it\par
+aligns well with the WSGI specification, to ensure easy adaptability\par
+between both specifications and the ability to keep using WSGI\par
+applications with ASGI servers.\par
+\par
+WSGI applications, being synchronous, must be run in a threadpool in order\par
+to be served, but otherwise their runtime maps onto the HTTP connection scope's\par
+lifetime.\par
+\par
+There is an almost direct mapping for the various special keys in\par
+WSGI's ``environ`` variable to the ``http`` scope:\par
+\par
+* ``REQUEST_METHOD`` is the ``method``\par
+* ``SCRIPT_NAME`` is ``root_path``\par
+* ``PATH_INFO`` can be derived from ``path`` and ``root_path``\par
+* ``QUERY_STRING`` is ``query_string``\par
+* ``CONTENT_TYPE`` can be extracted from ``headers``\par
+* ``CONTENT_LENGTH`` can be extracted from ``headers``\par
+* ``SERVER_NAME`` and ``SERVER_PORT`` are in ``server``\par
+* ``REMOTE_HOST``/``REMOTE_ADDR`` and ``REMOTE_PORT`` are in ``client``\par
+* ``SERVER_PROTOCOL`` is encoded in ``http_version``\par
+* ``wsgi.url_scheme`` is ``scheme``\par
+* ``wsgi.input`` is a ``StringIO`` based around the ``http.request`` messages\par
+* ``wsgi.errors`` is directed by the wrapper as needed\par
+\par
+The ``start_response`` callable maps similarly to ``http.response.start``:\par
+\par
+* The ``status`` argument becomes ``status``, with the reason phrase dropped.\par
+* ``response_headers`` maps to ``headers``\par
+\par
+Yielding content from the WSGI application maps to sending\par
+``http.response.body`` messages.\par
+\par
+\par
+WSGI encoding differences\par
+-------------------------\par
+\par
+The WSGI specification (as defined in PEP 3333) specifies that all strings\par
+sent to or from the server must be of the ``str`` type but only contain\par
+codepoints in the ISO-8859-1 ("latin-1") range. This was due to it originally\par
+being designed for Python 2 and its different set of string types.\par
+\par
+The ASGI HTTP and WebSocket specifications instead specify each entry of the\par
+``scope`` dict as either a byte string or a Unicode string. HTTP, being an\par
+older protocol, is sometimes imperfect at specifying encoding, so some\par
+decisions of what is Unicode versus bytes may not be obvious.\par
+\par
+* ``path``: URLs can have both percent-encoded and UTF-8 encoded sections.\par
+  Because decoding these is often done by the underlying server (or sometimes\par
+  even proxies in the path), this is a Unicode string, fully decoded from both\par
+  UTF-8 encoding and percent encodings.\par
+\par
+* ``headers``: These are byte strings of the exact byte sequences sent by the\par
+  client/to be sent by the server. While modern HTTP standards say that headers\par
+  should be ASCII, older ones did not and allowed a wider range of characters.\par
+  Frameworks/applications should decode headers as they deem appropriate.\par
+\par
+* ``query_string``: Unlike the ``path``, this is not as subject to server\par
+  interference and so is presented as its raw byte string version,\par
+  percent-encoded.\par
+\par
+* ``root_path``: Unicode string to match ``path``.\par
+\par
+\par
+Version History\par
+===============\par
+\par
+* 2.0 (2017-11-28): Initial non-channel-layer based ASGI spec\par
+\par
+\par
+Copyright\par
+=========\par
+\par
+This document has been placed in the public domain.\par
+}
+ 
