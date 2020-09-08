@@ -1,18 +1,65 @@
 {% extends "blog/base.html" %}
-{% load crispy_forms_tags %}
+<!--{% load crispy_forms_tags %}-->
 {% block content %}
-<div class="container">
-    <h3 class="white-important">
-        {{  tag_line }}
-    </h3>
-    <form method="POST" class="col-12 col-md-6 no-padding pr-3 pr-md-0">
-        {% csrf_token %}
-        <fieldset class="form-group">
-            {{ form | crispy }}
-        </fieldset>
-        <div class="form-group">
-            <button class="btn btn-outline-primary" type="submit">Post</button>
+
+    <div style="height: 100vh">
+        <div class="flex-center flex-column">
+            <br>
+            <br>
+            <h1 class="animated fadeIn mb-4">Join into group channel with the provided code.</h1>
+            <h3><p class="animated fadeIn">In which group do you belong?</p></h3>
+
+            <!-- Material input -->
+            <div class="md-form">
+<!--                <i class="fa fa-user prefix"></i>-->
+                <input id="room-name-input" type="text" id="inputIconEx2" class="form-control" placeholder="Group channel code">
+                <br>
+                <br>
+                <center>
+                    <button id="room-name-submit" type="submit" class="btn btn-primary btn-md">Enter</button>
+                </center>
+
+            </div>
+<br>
+                <br>
+            <center>
+                <h1 class="animated fadeIn mb-3">Let's get connected.</h1>
+            </center>
+
         </div>
-    </form>
-</div>
+    </div>
+<!--<div class="container">-->
+<!--    <h3 class="white-important">-->
+<!--        {{  tag_line }}-->
+<!--    </h3>-->
+<!--    <form method="POST" class="col-12 col-md-6 no-padding pr-3 pr-md-0">-->
+<!--        {% csrf_token %}-->
+<!--        <fieldset class="form-group">-->
+<!--            {{ form | crispy }}-->
+<!--        </fieldset>-->
+<!--        <div class="form-group">-->
+<!--            <button class="btn btn-outline-primary" type="submit">Post</button>-->
+<!--        </div>-->
+<!--    </form>-->
+<!--</div>-->
 {% endblock content %}
+
+
+{% block script %}
+
+    <script type="text/javascript" charset="utf-8" async defer>
+        var roomName = $("#room-name-input").focus();
+
+        $("#room-name-input").keyup(function(e) {
+            if (e.keyCode === 13) {
+                $("#room-name-submit").click();
+            }
+        });
+
+        $("#room-name-submit").click(function(e) {
+            var roomName = $("#room-name-input").val();
+            window.location.pathname = '/chat/' + roomName + '/';
+        })
+    </script>
+
+{% endblock %}
