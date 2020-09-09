@@ -141,7 +141,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        data['tag_line'] = 'Add a new post'
+        data['tag_line'] = 'Create a new post'
         return data
 
 
@@ -264,3 +264,20 @@ def postpreference(request, postid, userpreference):
                           'postid': postid}
 
                 return redirect('blog-home')
+
+# chatroom
+
+class JoinRoom(LoginRequiredMixin, CreateView):
+    model = Post
+    fields = ['content']
+    template_name = 'blog/chat_room.html'
+    success_url = '/'
+
+    def form_valid(self, form):
+        form.instance.author = self.request.user
+        return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        data = super().get_context_data(**kwargs)
+        data['tag_line'] = 'Create a new post'
+        return data
